@@ -1,4 +1,4 @@
-#4:34
+#5:37
 
 import pandas as pd
 import numpy as np
@@ -331,7 +331,8 @@ def run():
 
 	while True:
 		print('input: ')
-		cmd = sys.stdin.readlines()
+		cmd = sys.stdin.readline()
+		sys.stdout.flush()
 		# cmd = input()
 		p.cmd(cmd)
 
