@@ -1,4 +1,4 @@
-#5:37
+#7:37
 
 import pandas as pd
 import numpy as np
@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 import seaborn as sns
 import sys
+import re
 
 #analyzes data and assigns windows as necessary
 #assumes the first flag (flag0) is if a beat is started
@@ -124,38 +125,84 @@ def score_func(pipeline, channels, feature_space):
 def syn_func(pipeline, channels, feature_space):
 	return channels, feature_space
 
+#gets all the windows in all provided channels
+#expected to be a list
+def get_windows(channels):
+
+	all_windows = []
+
+	for channel in channels:
+		windows = channel.windows
+		for window_group in windows:
+			for winid in window_group:
+				if winid not in all_windows:
+					all_windows.append(winid)
+
+	return all_windows
+
 #creates a TSNE plot of the feature_space
-def async_func(pipeline, channels, feature_space):
-	print('ASYNCH')
-	
-	#calculating tsne
-	features = feature_space.drop('score',axis = 1)
-	features_embeded = TSNE(n_components=2).fit_transform(features.values)
+#accepts arguments seperated by spaces:
+#"p s[1:4]" would plot the mel spectrogram, and produce a score for channels 1-3
+def async_func(pipeline, channels, feature_space, args):
 
-	#creating plotting df
-	plot_df = pd.DataFrame(features_embeded, columns=['x', 'y'])
+	if any(['t' in arg for arg in args]):
+		print('plotting with p switch')
+		
+		#calculating tsne
+		features = feature_space.drop('score',axis = 1)
+		features_embeded = TSNE(n_components=2).fit_transform(features.values)
 
-	#setting window ID and scores
-	plot_df['window_id']=feature_space.index
-	plot_df['score']=feature_space.score
+		#creating plotting df
+		plot_df = pd.DataFrame(features_embeded, columns=['x', 'y'])
 
-	#finding origin channel of each window id
-	win_chan = {}
-	for channelid, channel in enumerate(channels):
-		winids = []
-		for sublist in channel.windows.values:
-			if sublist is None:
-				continue
-			for item in sublist:
-				if item not in winids: 
-					winids.append(item)
+		#setting window ID and scores
+		plot_df['window_id']=feature_space.index
+		plot_df['score']=feature_space.score
 
-		for winid in winids:
-			win_chan[winid] = channelid
-	plot_df['channel_id'] = [win_chan[winid] for winid in plot_df['window_id']]
+		#finding origin channel of each window id
+		win_chan = {}
+		for channelid, channel in enumerate(channels):
+			winids = []
+			for sublist in channel.windows.values:
+				if sublist is None:
+					continue
+				for item in sublist:
+					if item not in winids: 
+						winids.append(item)
 
-	sns.scatterplot(data=plot_df, x="x", y="y", size='score', hue='channel_id')
-	plt.show()
+			for winid in winids:
+				win_chan[winid] = channelid
+		plot_df['channel_id'] = [win_chan[winid] for winid in plot_df['window_id']]
+
+		sns.scatterplot(data=plot_df, x="x", y="y", size='score', hue='channel_id')
+		plt.show()
+
+	#getting the score of a slice [1:3], single channel [2], or all []
+	for arg in args:
+		if 's' in arg:
+
+			#parsing arguments
+			result = re.search('s(.*)', arg).group(1)
+			result = result.replace('[', '')
+			result = result.replace(']', '')
+
+			#getting windows to find the scores of
+			if ':' in result:
+				i1 = int(result.split(':')[0])
+				i2 = int(result.split(':')[1])
+				windows = get_windows(channels[i1:i2])
+			elif len(result) == 0:
+				windows = get_windows(channels)
+			else:
+				windows = get_windows([channels[int(result)]])
+
+			#eliminating windows without scores
+			windows = [w for w in windows if w in feature_space.index]
+
+			#printing the score
+			sys.stdout.write(str(feature_space.loc[windows].score.mean()))
+
+
 	
 	return channels, feature_space
 
@@ -205,7 +252,8 @@ class Pipeline:
 			self.add_data(data[0], data[1], data[2])
 
 		if 'run asynch' in cmd:
-			self.run_async()
+
+			self.run_async(cmd.split()[2:])
 
 		if 'echo' in cmd:
 			sys.stdout.write(cmd)
@@ -263,8 +311,8 @@ class Pipeline:
 		self.channels, self.feature_space = self.syncronous_function(self, self.channels, self.feature_space)
 
 	#runs the synchronous function
-	def run_async(self):
-		self.channels, self.feature_space = self.asyncronous_function(self, self.channels, self.feature_space)
+	def run_async(self, args):
+		self.channels, self.feature_space = self.asyncronous_function(self, self.channels, self.feature_space, args)
 
 def test():
 
@@ -325,6 +373,36 @@ def test():
 	print(p.channels)
 	print(p.feature_space)
 
+def test2():
+	p = Pipeline()
+	p.cmd('set num_channels 33')
+	p.cmd('set num_flags 2')
+	p.cmd('set input_size 6')
+	p.cmd('set channel_length 100')
+	p.cmd('set syncronous_function syn_func')
+	p.cmd('set asyncronous_function async_func')
+	p.cmd('set win_function win_func')
+	p.cmd('set window_size 5')
+	p.cmd('set score_function score_func')
+	p.cmd('initialize')
+
+	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[True, 1]')
+	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[True, 1]')
+	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[1, 3, 1, 2, 1, 5] ,[True, 1]')
+	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[1, 3, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
+
+	print(p.channels)
+	print(p.feature_space)
+
+	p.cmd('run asynch t s[0:4]')
+
 def run():
 	p = Pipeline()
 	print('running...')
@@ -337,4 +415,4 @@ def run():
 		p.cmd(cmd)
 
 if __name__ == '__main__':
-	run()
+	test2()
