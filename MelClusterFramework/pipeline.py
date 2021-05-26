@@ -1,4 +1,4 @@
-#7:37
+#10:00
 
 import pandas as pd
 import numpy as np
@@ -28,20 +28,32 @@ def win_func(pipeline, channels, feature_space):
 		channel = channels[i]
 
 		#assigning new beat beginnings to a window
-		new_beats = []
 		for rowIdx,row in channel[channel['windows'].isnull()][channel['flag0']].iterrows():
-			new_beats.append(rowIdx)
-			channel.loc[rowIdx]['windows'] = add_window(row['windows'], win_func.win_idx)
+
+			#adding window to beat
+			channel.loc[rowIdx, 'windows'] = add_window(row['windows'], win_func.win_idx)
+
+			#ensuring the list of windows is actually a list
+			if type(channel.loc[rowIdx, 'windows']) is not list:
+				channel['windows'] = channel['windows'].astype(object)
+				channel.loc[rowIdx, 'windows'] = channel.loc[rowIdx, 'windows'] if type(channel.loc[rowIdx, 'windows'])\
+												 is list else [[channel.loc[rowIdx, 'windows']]]
+
 			win_func.win_idx = win_func.win_idx+1
 
 		#checking beat beginnings for previous beats, one window away. Adding their window ID
 		for idx in channel.index:
-
 			scope = channel.loc[:idx].tail(pipeline.window_size)
-
 			#adding all windows in scope to each datum
 			for windows in scope[scope['flag0']].windows:
-				channel.loc[idx]['windows'] = add_window(channel.loc[idx]['windows'], max(windows))
+				#adding the window 
+				wins = add_window(channel.loc[idx]['windows'], max(windows))
+				channel.loc[idx,'windows'] = add_window(channel.loc[idx]['windows'], max(windows))
+				#ensuring the list of windows is actually a list
+				if type(channel.loc[idx, 'windows']) is not list:
+					channel['windows'] = channel['windows'].astype(object)
+					channel.loc[idx, 'windows'] = channel.loc[idx, 'windows'] if type(channel.loc[idx, 'windows'])\
+													 is list else [[channel.loc[idx, 'windows']]]
 
 		channels[i] = channel
 
@@ -96,8 +108,7 @@ def score_func(pipeline, channels, feature_space):
 				continue
 
 			#is a new, complete window
-			if len(channel)-idx > window_size:
-
+			if len(channel.loc[idx:]) > window_size:
 				#list of windows contains a new window
 				if any([window not in feature_space.index.tolist() for window in windows]):
 					for window in windows:
@@ -109,6 +120,7 @@ def score_func(pipeline, channels, feature_space):
 			window = channel[mask]
 
 			featurized_window = featurize(window)
+
 			feature_space.loc[new_id] = featurized_window
 
 	#scoring all unscored points in the feature space
@@ -134,15 +146,17 @@ def get_windows(channels):
 	for channel in channels:
 		windows = channel.windows
 		for window_group in windows:
-			for winid in window_group:
-				if winid not in all_windows:
-					all_windows.append(winid)
+			if type(window_group) == list:
+				for winid in window_group:
+					if winid not in all_windows:
+						all_windows.append(winid)
 
 	return all_windows
 
 #creates a TSNE plot of the feature_space
 #accepts arguments seperated by spaces:
 #"p s[1:4]" would plot the mel spectrogram, and produce a score for channels 1-3
+# plt.ion()
 def async_func(pipeline, channels, feature_space, args):
 
 	if any(['t' in arg for arg in args]):
@@ -175,6 +189,8 @@ def async_func(pipeline, channels, feature_space, args):
 		plot_df['channel_id'] = [win_chan[winid] for winid in plot_df['window_id']]
 
 		sns.scatterplot(data=plot_df, x="x", y="y", size='score', hue='channel_id')
+		# plt.draw()
+		# plt.pause(0.1) 
 		plt.show()
 
 	#getting the score of a slice [1:3], single channel [2], or all []
@@ -203,7 +219,6 @@ def async_func(pipeline, channels, feature_space, args):
 			sys.stdout.write(str(feature_space.loc[windows].score.mean()))
 
 
-	
 	return channels, feature_space
 
 #a pipeline for excepting time series 2D data in channels, grouping data into "beats",
@@ -387,25 +402,65 @@ def test2():
 	p.cmd('initialize')
 
 	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[True, 1]')
-	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
-	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
-	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
-	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[True, 1]')
-	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
-	p.cmd('add 0 ,[1, 3, 1, 2, 1, 5] ,[True, 1]')
-	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
-	p.cmd('add 0 ,[1, 3, 1, 2, 1, 5] ,[False, 1]')
-	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
-	p.cmd('add 0 ,[1, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[2, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[3, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[4, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[5, 2, 1, 2, 1, 5] ,[True, 1]')
+	p.cmd('add 0 ,[6, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[7, 3, 1, 2, 1, 5] ,[True, 1]')
+	p.cmd('add 0 ,[8, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[9, 3, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[10, 2, 1, 2, 1, 5] ,[False, 1]')
+	p.cmd('add 0 ,[11, 2, 1, 2, 1, 5] ,[False, 1]')
 
 	print(p.channels)
 	print(p.feature_space)
 
 	p.cmd('run asynch t s[0:4]')
 
+
+def test3():
+	p = Pipeline()
+	p.cmd("set num_channels 33")
+	p.cmd("set num_flags 1")
+	p.cmd("set input_size 25")
+	p.cmd("set channel_length 3000")
+	p.cmd("set syncronous_function syn_func")
+	p.cmd("set asyncronous_function async_func")
+	p.cmd("set win_function win_func")
+	p.cmd("set window_size 10")
+	p.cmd("set score_function score_func")
+	p.cmd("initialize")
+	p.cmd("add [0, [1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0], [True]]")
+	p.cmd("add [0, [0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0], [False]]")
+	p.cmd("add [0, [0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 1.000000, 0], [False]]")
+	p.cmd("add [0, [0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0], [False]]")
+	p.cmd("add [0, [1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1], [False]]")
+	p.cmd("add [0, [0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1], [False]]")
+	p.cmd("add [0, [1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1], [False]]")
+	p.cmd("add [0, [1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0], [False]]")
+	p.cmd("add [0, [1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0], [False]]")
+	p.cmd("add [0, [1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0], [False]]")
+	p.cmd("add [0, [0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0], [False]]")
+	p.cmd("add [0, [1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0], [True]]")
+	p.cmd("add [0, [0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0], [False]]")
+	p.cmd("add [0, [0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 1.000000, 0], [False]]")
+	p.cmd("add [0, [0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0], [False]]")
+	p.cmd("add [0, [1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1], [False]]")
+	p.cmd("add [0, [0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1], [False]]")
+	p.cmd("add [0, [1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1], [False]]")
+	p.cmd("add [0, [1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0], [False]]")
+	p.cmd("add [0, [1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0], [False]]")
+	p.cmd("add [0, [1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0], [False]]")
+	p.cmd("add [0, [0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0], [False]]")
+
+	print(p.channels)
+	print(p.feature_space)
+
+	p.cmd('run asynch t s[0]')
+
 def run():
 	p = Pipeline()
-	print('running...')
 
 	while True:
 		print('input: ')
@@ -415,4 +470,4 @@ def run():
 		p.cmd(cmd)
 
 if __name__ == '__main__':
-	run()
+	test2()
