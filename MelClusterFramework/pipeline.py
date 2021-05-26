@@ -470,4 +470,4 @@ def run():
 		p.cmd(cmd)
 
 if __name__ == '__main__':
-	test2()
+	run()
