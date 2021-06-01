@@ -10,6 +10,9 @@ import sys
 import re
 import time
 
+#prints INFO
+verbose=True
+
 #analyzes data and assigns windows as necessary
 #assumes the first flag (flag0) is if a beat is started
 def win_func(pipeline, channels, feature_space):
@@ -81,12 +84,12 @@ def score_func(pipeline, channels, feature_space):
 		centroid = (numerator/denom)/input_size
 	
 		#aggregating output
-		return np.hstack([magnitude.values,centroid.values,[None]])
+		return np.hstack([magnitude.values,centroid.values,[None, None]])
 
 	#creating a new dataframe for first run
 	if feature_space is None:
 		columns = ['feat{}'.format(i) for i in range(num_feat)] \
-		+ ['score']
+		+ ['score', 'channel']
 
 		feature_space = pd.DataFrame(columns = columns)
 
@@ -103,6 +106,7 @@ def score_func(pipeline, channels, feature_space):
 
 			featurized_window = featurize(channel.tail(window_size))
 			feature_space.loc[max(crit_row['windows'])] = featurized_window
+			feature_space.loc[max(crit_row['windows']),'channel'] = i
 
 	#scoring all unscored points in the feature space
 	noscore = feature_space.drop(columns = ['score'])
@@ -138,6 +142,7 @@ def get_windows(channels):
 #accepts arguments seperated by spaces:
 #"p s[1:4]" would plot the mel spectrogram, and produce a score for channels 1-3
 # plt.ion()
+#TODO: change from destroyed to using the stored channel?
 def async_func(pipeline, channels, feature_space, args):
 
 	if any(['t' in arg for arg in args]):
@@ -197,7 +202,7 @@ def async_func(pipeline, channels, feature_space, args):
 			windows = [w for w in windows if w in feature_space.index]
 
 			#printing the score
-			print(feature_space.loc[windows].score.mean())
+			if verbose: print('RESPONSE:',feature_space.loc[windows].score.mean())
 			# sys.stdout.write(str(feature_space.loc[windows].score.mean()))
 			# sys.stdout.flush()
 
@@ -304,6 +309,8 @@ class Pipeline:
 		# t = time.time()
 		self.run_sync()
 		# print('sync function: ', time.time()-t)
+
+		print('INFO: datum added')
 
 	def run_win(self):
 		self.channels, self.feature_space = self.win_function(self, self.channels, self.feature_space)
@@ -1709,8 +1716,9 @@ def test6():
 	p.cmd("add [0, [1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.0000], [False]]")
 	p.cmd("add [0, [1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.0000], [False]]")
 	p.cmd("run asynch s[17]")
-	print()
 	p.cmd("run asynch s[ ]")
+
+	print(p.feature_space)
 
 def run():
 	p = Pipeline()
@@ -1722,4 +1730,4 @@ def run():
 		p.cmd(cmd)
 
 if __name__ == '__main__':
-	run()
+	test6()
