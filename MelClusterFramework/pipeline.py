@@ -1,4 +1,4 @@
-#11:20
+#12:00
 
 import pandas as pd
 pd.options.mode.chained_assignment = None
@@ -11,7 +11,8 @@ import re
 import time
 
 #prints INFO
-verbose=True
+info_verbose=True
+debug_verbose=False
 
 #analyzes data and assigns windows as necessary
 #assumes the first flag (flag0) is if a beat is started
@@ -202,9 +203,7 @@ def async_func(pipeline, channels, feature_space, args):
 			windows = [w for w in windows if w in feature_space.index]
 
 			#printing the score
-			if verbose: print('RESPONSE:',feature_space.loc[windows].score.mean())
-			# sys.stdout.write(str(feature_space.loc[windows].score.mean()))
-			# sys.stdout.flush()
+			if info_verbose: print('RESPONSE: Score for [', result, ']: ',feature_space.loc[windows].score.mean())
 
 
 	return channels, feature_space
@@ -275,6 +274,10 @@ class Pipeline:
 
 	def add_data(self, channel, data, flags):
 
+		start = time.time()
+
+		t = time.time()
+
 		#adding data
 		if len(data) != self.input_size:
 			raise ValueError('received {} data points in a channel with length {}'.format(len(data), self.input_size))
@@ -291,24 +294,32 @@ class Pipeline:
 
 		app_dict['windows'] = []
 
+		if debug_verbose: print('DEBUG: parse: ', time.time()-t)
+
+		t = time.time()
+
 		self.channels[channel] = self.channels[channel].append(app_dict, ignore_index=True)
 		self.channels[channel] = self.channels[channel].tail(self.channel_length)
 
+		if debug_verbose: print('DEBUG: append: ', time.time()-t)
+
 		# print('adding point')
 		#running window creation
-		# t = time.time()
+		t = time.time()
 		self.run_win()
-		# print('win function: ', time.time()-t)
+		if debug_verbose: print('DEBUG: win function: ', time.time()-t)
 
 		#scoring windows
-		# t = time.time()
+		t = time.time()
 		self.run_score()
-		# print('score function: ', time.time()-t)
+		if debug_verbose: print('DEBUG: score function: ', time.time()-t)
 
 		#running syncronous function
-		# t = time.time()
+		t = time.time()
 		self.run_sync()
-		# print('sync function: ', time.time()-t)
+		if debug_verbose: print('DEBUG: sync function: ', time.time()-t)
+
+		if debug_verbose: print('DEBUG: total add time: ', time.time()-start)
 
 		print('INFO: datum added')
 
@@ -1730,4 +1741,4 @@ def run():
 		p.cmd(cmd)
 
 if __name__ == '__main__':
-	test6()
+	run()
