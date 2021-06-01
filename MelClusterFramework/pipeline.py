@@ -10,7 +10,6 @@ import sys
 import re
 import time
 
-
 #analyzes data and assigns windows as necessary
 #assumes the first flag (flag0) is if a beat is started
 def win_func(pipeline, channels, feature_space):
@@ -198,8 +197,9 @@ def async_func(pipeline, channels, feature_space, args):
 			windows = [w for w in windows if w in feature_space.index]
 
 			#printing the score
-			sys.stdout.write(str(feature_space.loc[windows].score.mean()))
-			sys.stdout.flush()
+			print(feature_space.loc[windows].score.mean())
+			# sys.stdout.write(str(feature_space.loc[windows].score.mean()))
+			# sys.stdout.flush()
 
 
 	return channels, feature_space
@@ -407,7 +407,6 @@ def test2():
 	print(p.feature_space)
 
 	p.cmd('run asynch t s[0:4]')
-
 
 def test3():
 	p = Pipeline()
