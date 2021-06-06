@@ -189,22 +189,7 @@ def async_func(pipeline, channels, feature_space, args):
 		#setting window ID and scores
 		plot_df['window_id']=feature_space.index
 		plot_df['score']=feature_space.score
-
-		#finding origin channel of each window id
-		win_chan = {}
-		for channelid, channel in enumerate(channels):
-			winids = []
-			for sublist in channel.windows.values:
-				if sublist is None:
-					continue
-				for item in sublist:
-					if item not in winids: 
-						winids.append(item)
-
-			for winid in winids:
-				win_chan[winid] = channelid
-
-		plot_df['channel_id'] = [win_chan[winid] if winid in win_chan.keys() else 'destroyed' for winid in plot_df['window_id']]
+		plot_df['channel_id'] = feature_space.channel
 
 		sns.scatterplot(data=plot_df, x="x", y="y", size='score', hue='channel_id')
 		# plt.draw()
@@ -1763,7 +1748,7 @@ def test6():
 	p.cmd("add [0, [0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.0000], [False]]")
 	p.cmd("add [0, [1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.0000], [False]]")
 	p.cmd("add [0, [1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.0000], [False]]")
-	p.cmd("run asynch  s[17]")
+	p.cmd("run asynch t s[17]")
 	p.cmd("run asynch s[ ]")
 
 	print(p.feature_space)
