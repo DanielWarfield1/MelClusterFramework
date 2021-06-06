@@ -1,4 +1,4 @@
-#12:00
+#14:00
 
 import pandas as pd
 pd.options.mode.chained_assignment = None
@@ -12,46 +12,58 @@ import time
 
 #prints INFO
 info_verbose=True
-debug_verbose=False
+debug_verbose=True
 
 #analyzes data and assigns windows as necessary
 #assumes the first flag (flag0) is if a beat is started
 def win_func(pipeline, channels, feature_space):
 	
-	#helper function for adding idx to list
-	def add_window(ls, idx):
+	#list of column names, for referencing
+	c = pipeline.channel_columns
+	idx_n = c.index('isNew')
+	idx_w = c.index('windows')
+
+	#helper function for adding idx to the windows list in a row
+	def add_window(row, winidx):
+
+		#list of windows
+		ls = row[idx_w]
+
 		if ls is None or len(ls) == 0:
-			return [idx]
-		elif idx in ls:
-			return sorted(ls)
+			ls = [winidx]
+		elif winidx in ls:
+			ls =  sorted(ls)
 		else:
-			ls.append(idx)
-			return sorted(ls)
+			ls.append(winidx)
+			ls =  sorted(ls)
+
+		row[idx_w] = ls
+		return row
 
 	#assigning window indexes
 	for i in range(len(channels)):
 
 		channel = channels[i]
 
-		if len(channel) == 0:
+		if channel is None or len(channel) == 0:
 			continue
 
 		#assigning new beat beginnings to a window
-		last_row = channel.loc[channel.index[-1]]
-		if last_row['flag0']:
-			channel.at[channel.index[-1], 'windows'] = add_window(last_row['windows'], win_func.win_idx)
+		last_row = channel[-1]
+		if last_row[idx_n]:
+			last_row = add_window(last_row, win_func.win_idx)
 			win_func.win_idx += 1
 		#adding to beat, if the beat started within window_size
 		else:
-			scope = channel.tail(pipeline.window_size)
-			#getting the winow id's of all beat starts in the scope
-			for windows in scope[scope['flag0']].windows:
-				#adding the window 
-				if len(windows) == 0:
-					continue
-				thiswins = channel.at[channel.index[-1], 'windows']
-				thiswins = add_window(thiswins, max(windows))
-				channel.at[channel.index[-1], 'windows'] = thiswins
+			scope = channel[-pipeline.window_size:]
+
+			#getting the window for each beat beginnings in scope
+			bbwins = [max(row[idx_w]) for row in scope if row[idx_n]]
+
+			#adding all windows in scope to the last row
+			for window in bbwins:
+				last_row = add_window(last_row, window)
+				channel[-1] = last_row
 
 		channels[i] = channel
 
@@ -67,25 +79,31 @@ def score_func(pipeline, channels, feature_space):
 	num_feat = window_size * 2
 	input_size = pipeline.input_size
 
+	#getting key column indexes in the channels
+	c = pipeline.channel_columns
+	idx_n = c.index('isNew')
+	idx_w = c.index('windows')
+
 	#helper functions that performs featurization
 	#accepts a dataframe, and returns the centroid and magnitude at each time step
 	def featurize(window):
 
 		#trimming to only input columns
-		window = window[window.columns[:input_size]]
+		window = window[:,:input_size]
 		
 		#calculating magnitude
 		magnitude = window.mean(axis=1)
 
 		#calculating centroid
 		denom = window.sum(axis=1)
-		for i,_ in enumerate(window.columns):
-			window.iloc[:,i]  *= i
+
+		for i in range(window.shape[1]):
+			window[:,i]  *= i
 		numerator = window.sum(axis=1)
 		centroid = (numerator/denom)/input_size
 	
 		#aggregating output
-		return np.hstack([magnitude.values,centroid.values,[None, None]])
+		return np.hstack([magnitude,centroid,[None, None]])
 
 	#creating a new dataframe for first run
 	if feature_space is None:
@@ -98,16 +116,17 @@ def score_func(pipeline, channels, feature_space):
 	for i in range(len(channels)):
 		channel = channels[i]
 
-		if len(channel) < window_size:
+		if channel is None or len(channel) < window_size:
 			continue
 
 		#checking if a beat has just concluded
-		crit_row = channel.loc[channel.index[-window_size]]
-		if crit_row['flag0']:
+		crit_row = channel[-window_size]
+		if crit_row[idx_n]:
 
-			featurized_window = featurize(channel.tail(window_size))
-			feature_space.loc[max(crit_row['windows'])] = featurized_window
-			feature_space.loc[max(crit_row['windows']),'channel'] = i
+			featurized_window = featurize(channel[-window_size:])
+
+			feature_space.loc[max(crit_row[idx_w])] = featurized_window
+			feature_space.loc[max(crit_row[idx_w]),'channel'] = i
 
 	#scoring all unscored points in the feature space
 	noscore = feature_space.drop(columns = ['score'])
@@ -125,12 +144,19 @@ def syn_func(pipeline, channels, feature_space):
 
 #gets all the windows in all provided channels
 #expected to be a list
-def get_windows(channels):
+def get_windows(pipeline, channels):
+
+	#getting key column indexes in the channels
+	c = pipeline.channel_columns
+	idx_n = c.index('isNew')
+	idx_w = c.index('windows')
 
 	all_windows = []
 
 	for channel in channels:
-		windows = channel.windows
+		if channel is None:
+			continue
+		windows = channel[:,idx_w]
 		for window_group in windows:
 			if type(window_group) == list:
 				for winid in window_group:
@@ -145,6 +171,11 @@ def get_windows(channels):
 # plt.ion()
 #TODO: change from destroyed to using the stored channel?
 def async_func(pipeline, channels, feature_space, args):
+
+	#getting key column indexes in the channels
+	c = pipeline.channel_columns
+	idx_n = c.index('isNew')
+	idx_w = c.index('windows')
 
 	if any(['t' in arg for arg in args]):
 		
@@ -195,9 +226,9 @@ def async_func(pipeline, channels, feature_space, args):
 				i2 = int(result.split(':')[1])
 				windows = get_windows(channels[i1:i2])
 			elif len(result) == 0:
-				windows = get_windows(channels)
+				windows = get_windows(pipeline, channels)
 			else:
-				windows = get_windows([channels[int(result)]])
+				windows = get_windows(pipeline, [channels[int(result)]])
 
 			#eliminating windows without scores
 			windows = [w for w in windows if w in feature_space.index]
@@ -227,7 +258,8 @@ class Pipeline:
 		self.flags = None
 
 		#internal structures
-		self.channels = [] #list of dfs
+		self.channels = [] #list of numpy nd arrays (changed from df for faster operation)
+		self.channel_columns = [] #list of column names for each channel
 		self.feature_space = None #df
 
 	#accept commands in the form of strings
@@ -264,13 +296,12 @@ class Pipeline:
 	def initialize(self):
 
 		#creating the dataframes which holds channels
-		columns = ['input{}'.format(i) for i in range(self.input_size)] \
+		self.channel_columns = ['input{}'.format(i) for i in range(self.input_size)] \
+		+ ['isNew'] \
 		+ ['flag{}'.format(i) for i in range(self.num_flags)]\
 		+ ['windows']
 
 		self.channels = [None]*self.num_channels
-		for idx in range(self.num_channels):
-			self.channels[idx] = pd.DataFrame(columns = columns)
 
 	def add_data(self, channel, data, flags):
 
@@ -282,24 +313,30 @@ class Pipeline:
 		if len(data) != self.input_size:
 			raise ValueError('received {} data points in a channel with length {}'.format(len(data), self.input_size))
 
-		if len(flags) != self.num_flags:
+		#flags includes the isNew mandatory flag
+		if len(flags) != self.num_flags+1:
 			raise ValueError('received {} data flags, expected {}'.format(len(flags), self.num_flags))
 
-		app_dict = {}
-		for i in range(len(data)):
-			app_dict['input{}'.format(i)] = data[i]
-
-		for i in range(len(flags)):
-			app_dict['flag{}'.format(i)] = flags[i]
-
-		app_dict['windows'] = []
+		#creating new datum
+		new = data
+		new.extend(flags)
+		new.append([])
 
 		if debug_verbose: print('DEBUG: parse: ', time.time()-t)
 
 		t = time.time()
 
-		self.channels[channel] = self.channels[channel].append(app_dict, ignore_index=True)
-		self.channels[channel] = self.channels[channel].tail(self.channel_length)
+		#adding data
+		if self.channels[channel] is None:
+			#first time, creating 2D matrix with one row
+			self.channels[channel] = np.array([new],dtype=object)
+		else:
+			#appending to matrix
+			new = np.array([new],dtype=object)
+			self.channels[channel] = np.append(self.channels[channel], new, axis=0)
+
+		#trimming down as necessary
+		self.channels[channel] = self.channels[channel][-self.channel_length:]
 
 		if debug_verbose: print('DEBUG: append: ', time.time()-t)
 
@@ -521,7 +558,7 @@ def test4():
 def test5():
 	p = Pipeline()
 	p.cmd("set num_channels 33")
-	p.cmd("set num_flags 1")
+	p.cmd("set num_flags 0")
 	p.cmd("set input_size 25")
 	p.cmd("set channel_length 30")
 	p.cmd("set syncronous_function syn_func")
@@ -1693,7 +1730,7 @@ def test5():
 def test6():
 	p = Pipeline()
 	p.cmd("set num_channels 33")
-	p.cmd("set num_flags 1")
+	p.cmd("set num_flags 0")
 	p.cmd("set input_size 25")
 	p.cmd("set channel_length 30")
 	p.cmd("set syncronous_function syn_func")
@@ -1726,7 +1763,7 @@ def test6():
 	p.cmd("add [0, [0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.0000], [False]]")
 	p.cmd("add [0, [1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 0.000000, 1.000000, 1.0000], [False]]")
 	p.cmd("add [0, [1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.0000], [False]]")
-	p.cmd("run asynch s[17]")
+	p.cmd("run asynch  s[17]")
 	p.cmd("run asynch s[ ]")
 
 	print(p.feature_space)
