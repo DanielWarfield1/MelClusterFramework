@@ -12,7 +12,7 @@ import time
 
 #prints INFO
 info_verbose=True
-debug_verbose=True
+debug_verbose=False
 
 #analyzes data and assigns windows as necessary
 #assumes the first flag (flag0) is if a beat is started
