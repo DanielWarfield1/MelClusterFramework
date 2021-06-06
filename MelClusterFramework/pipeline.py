@@ -75,6 +75,8 @@ win_func.win_idx=0
 #scores using the average Manhattan distance between a point and all other points
 def score_func(pipeline, channels, feature_space):
 
+	t = time.time()
+
 	window_size = pipeline.window_size
 	num_feat = window_size * 2
 	input_size = pipeline.input_size
@@ -103,14 +105,21 @@ def score_func(pipeline, channels, feature_space):
 		centroid = (numerator/denom)/input_size
 	
 		#aggregating output
-		return np.hstack([magnitude,centroid,[None, None]])
+		return np.hstack([magnitude,centroid,[None, None, None]])
 
-	#creating a new dataframe for first run
-	if feature_space is None:
-		columns = ['feat{}'.format(i) for i in range(num_feat)] \
-		+ ['score', 'channel']
+	#creating the info for the feature_space for the first run
+	if len(pipeline.feature_space_columns) == 0:
+		pipeline.feature_space_columns = ['feat{}'.format(i) for i in range(num_feat)] \
+		+ ['score', 'channel', 'window']
 
-		feature_space = pd.DataFrame(columns = columns)
+	#getting key column indexes in the feature space
+	f = pipeline.feature_space_columns
+	idx_f_s = f.index('score')
+	idx_f_c = f.index('channel')
+	idx_f_w = f.index('window')
+
+	if debug_verbose: print('DEBUG: score function: setup: ', time.time()-t)
+	t = time.time()
 
 	#if there is a full window, featuring and scoring
 	for i in range(len(channels)):
@@ -123,19 +132,36 @@ def score_func(pipeline, channels, feature_space):
 		crit_row = channel[-window_size]
 		if crit_row[idx_n]:
 
+			#compiling row
 			featurized_window = featurize(channel[-window_size:])
+			featurized_window[idx_f_c] = i
+			featurized_window[idx_f_w] = max(crit_row[idx_w])
 
-			feature_space.loc[max(crit_row[idx_w])] = featurized_window
-			feature_space.loc[max(crit_row[idx_w]),'channel'] = i
+			#adding data
+			if feature_space is None:
+				#new
+				feature_space = np.array([featurized_window])
+			else:
+				#appending
+				feature_space = np.append(feature_space, [featurized_window], axis=0)
+
+	if debug_verbose: print('DEBUG: score function: featurizing: ', time.time()-t)
+	t = time.time()
+
+	if feature_space is None:
+		return channels, feature_space
 
 	#scoring all unscored points in the feature space
-	noscore = feature_space.drop(columns = ['score'])
-	for i, row in feature_space.iterrows():
-		if row.score is None:
-			point = noscore.loc[i]
-			dist = noscore.sub(point)
+	noscore = feature_space[:,:num_feat]
+	for i, row in enumerate(feature_space):
+		if row[idx_f_s] is None:
+
+			point = noscore[i]
+			dist = noscore-point
 			score = dist.sum(axis=1).mean()
-			feature_space.loc[i,'score'] = abs(score)
+			feature_space[i,idx_f_s] = abs(score)
+
+	if debug_verbose: print('DEBUG: score function: scoring: ', time.time()-t)
 
 	return channels, feature_space
 
@@ -169,27 +195,34 @@ def get_windows(pipeline, channels):
 #accepts arguments seperated by spaces:
 #"p s[1:4]" would plot the mel spectrogram, and produce a score for channels 1-3
 # plt.ion()
-#TODO: change from destroyed to using the stored channel?
 def async_func(pipeline, channels, feature_space, args):
+
+	num_feat = pipeline.window_size * 2
 
 	#getting key column indexes in the channels
 	c = pipeline.channel_columns
 	idx_n = c.index('isNew')
 	idx_w = c.index('windows')
 
+	#getting key column indexes in the feature space
+	f = pipeline.feature_space_columns
+	idx_f_s = f.index('score')
+	idx_f_c = f.index('channel')
+	idx_f_w = f.index('window')
+
 	if any(['t' in arg for arg in args]):
 		
 		#calculating tsne
-		features = feature_space.drop('score',axis = 1)
-		features_embeded = TSNE(n_components=2).fit_transform(features.values)
+		features = feature_space[:,:num_feat]
+		features_embeded = TSNE(n_components=2).fit_transform(features)
 
 		#creating plotting df
 		plot_df = pd.DataFrame(features_embeded, columns=['x', 'y'])
 
 		#setting window ID and scores
-		plot_df['window_id']=feature_space.index
-		plot_df['score']=feature_space.score
-		plot_df['channel_id'] = feature_space.channel
+		plot_df['window_id']=feature_space[:,idx_f_w]
+		plot_df['score']=feature_space[:,idx_f_s]
+		plot_df['channel_id'] = feature_space[:,idx_f_c]
 
 		sns.scatterplot(data=plot_df, x="x", y="y", size='score', hue='channel_id')
 		# plt.draw()
@@ -215,11 +248,11 @@ def async_func(pipeline, channels, feature_space, args):
 			else:
 				windows = get_windows(pipeline, [channels[int(result)]])
 
-			#eliminating windows without scores
-			windows = [w for w in windows if w in feature_space.index]
+			#getting relevant windows
+			relevent = np.array([beat for beat in feature_space if beat[idx_f_w] in windows])
 
 			#printing the score
-			if info_verbose: print('RESPONSE: Score for [', result, ']: ',feature_space.loc[windows].score.mean())
+			if info_verbose: print('RESPONSE: Score for [', result, ']: ',relevent[:,idx_f_s].mean())
 
 
 	return channels, feature_space
@@ -245,7 +278,9 @@ class Pipeline:
 		#internal structures
 		self.channels = [] #list of numpy nd arrays (changed from df for faster operation)
 		self.channel_columns = [] #list of column names for each channel
-		self.feature_space = None #df
+		
+		self.feature_space = None #numpy nd array
+		self.feature_space_columns = [] #list of columns for the feature_space df
 
 	#accept commands in the form of strings
 	def cmd(self,cmd):
