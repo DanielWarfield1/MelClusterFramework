@@ -102,7 +102,11 @@ def score_func(pipeline, channels, feature_space):
 		for i in range(window.shape[1]):
 			window[:,i]  *= i
 		numerator = window.sum(axis=1)
-		centroid = (numerator/denom)/input_size
+		if (denom != 0).all():
+			centroid = (numerator/denom)/input_size
+		else:
+			if debug_verbose: print('DEBUG: divide by zero in centroid calc, setting centroid for beat as all zeros')
+			centroid = [0]*len(numerator)
 	
 		#aggregating output
 		return np.hstack([magnitude,centroid,[None, None, None]])
@@ -134,7 +138,11 @@ def score_func(pipeline, channels, feature_space):
 
 			#compiling row
 			featurized_window = featurize(channel[-window_size:])
-			featurized_window[idx_f_c] = i
+			try:
+				featurized_window[idx_f_c] = i
+			except Exception as e:
+				print(f)
+				raise e
 			featurized_window[idx_f_w] = max(crit_row[idx_w])
 
 			#adding data
@@ -378,7 +386,7 @@ class Pipeline:
 
 		if debug_verbose: print('DEBUG: total add time: ', time.time()-start)
 
-		print('INFO: datum added')
+		if info_verbose: print('INFO: datum added')
 
 	def run_win(self):
 		self.channels, self.feature_space = self.win_function(self, self.channels, self.feature_space)
@@ -1788,6 +1796,22 @@ def test6():
 
 	print(p.feature_space)
 
+def run_from_test_file(file_name):
+
+	p = Pipeline()
+
+	print('running...')
+
+	with open('Tests\\' + file_name) as file_in:
+		for line in file_in:
+			# print(line)
+			try:
+				p.cmd(line)
+			except Exception as e:
+				print('Failed line: ')
+				print(line)
+				raise e
+
 def run():
 	p = Pipeline()
 
@@ -1798,4 +1822,7 @@ def run():
 		p.cmd(cmd)
 
 if __name__ == '__main__':
+	# start = time.time()
+	# run_from_test_file('2021-5-6-19-44-28-478.txt')
 	run()
+	# print('time: ', time.time()-start)
