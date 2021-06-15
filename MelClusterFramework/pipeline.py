@@ -135,7 +135,6 @@ def score_func(pipeline, channels, feature_space):
 		#checking if a beat has just concluded
 		crit_row = channel[-window_size]
 		if crit_row[idx_n]:
-
 			#compiling row
 			featurized_window = featurize(channel[-window_size:])
 			try:
@@ -152,6 +151,8 @@ def score_func(pipeline, channels, feature_space):
 			else:
 				#appending
 				feature_space = np.append(feature_space, [featurized_window], axis=0)
+				#trimming
+				feature_space = feature_space[-pipeline.num_beats:]
 
 	if debug_verbose: print('DEBUG: score function: featurizing: ', time.time()-t)
 	t = time.time()
@@ -274,6 +275,7 @@ class Pipeline:
 		self.num_channels = None
 		self.input_size = None
 		self.channel_length = None
+		self.num_beats = 100
 		self.num_flags = None
 		self.window_size = None
 		self.win_function = None
