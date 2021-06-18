@@ -13,6 +13,8 @@ import time
 #prints INFO
 info_verbose=False
 debug_verbose=False
+output_verbose=True #toggle automated output, prompted output is not effected
+
 
 #analyzes data and assigns windows as necessary
 #assumes the first flag (flag0) is if a beat is started
@@ -50,7 +52,9 @@ def win_func(pipeline, channels, feature_space):
 
 		#assigning new beat beginnings to a window
 		last_row = channel[-1]
-		if last_row[idx_n]:
+
+		#is the last beat a new beat
+		if last_row[idx_n] and len(last_row[idx_w]) == 0:
 			last_row = add_window(last_row, win_func.win_idx)
 			win_func.win_idx += 1
 		#adding to beat, if the beat started within window_size
@@ -109,32 +113,34 @@ def score_func(pipeline, channels, feature_space):
 			centroid = [0]*len(numerator)
 	
 		#aggregating output
-		return np.hstack([magnitude,centroid,[None, None, None]])
+		return np.hstack([magnitude,centroid,[None, None, None, time.time()]])
 
 	#creating the info for the feature_space for the first run
 	if len(pipeline.feature_space_columns) == 0:
 		pipeline.feature_space_columns = ['feat{}'.format(i) for i in range(num_feat)] \
-		+ ['score', 'channel', 'window']
+		+ ['score', 'channel', 'window', 'time']
 
 	#getting key column indexes in the feature space
 	f = pipeline.feature_space_columns
 	idx_f_s = f.index('score')
 	idx_f_c = f.index('channel')
 	idx_f_w = f.index('window')
+	idx_f_t = f.index('time')
 
 	if debug_verbose: print('DEBUG: score function: setup: ', time.time()-t)
 	t = time.time()
 
 	#if there is a full window, featuring and scoring
 	for i in range(len(channels)):
+
 		channel = channels[i]
 
 		if channel is None or len(channel) < window_size:
 			continue
 
-		#checking if a beat has just concluded
+		#checking if a beat has just concluded and hasn't already been added to the feature space
 		crit_row = channel[-window_size]
-		if crit_row[idx_n]:
+		if crit_row[idx_n] and (feature_space is None or max(crit_row[idx_w]) not in feature_space[:,idx_f_w]):
 			#compiling row
 			featurized_window = featurize(channel[-window_size:])
 			try:
@@ -152,7 +158,14 @@ def score_func(pipeline, channels, feature_space):
 				#appending
 				feature_space = np.append(feature_space, [featurized_window], axis=0)
 				#trimming
-				feature_space = feature_space[-pipeline.num_beats:]
+				if pipeline.num_beats is not -1:
+					#trimming based on number of beats
+					feature_space = feature_space[-pipeline.num_beats:]
+				elif pipeline.time_beats is not -1:
+					#trimming based on how long beats have existed
+					feature_space = feature_space[(time.time() - feature_space[:,idx_f_t]) < pipeline.time_beats]
+
+				elif info_verbose: print('INFO: no valid feature space trimming value')
 
 	if debug_verbose: print('DEBUG: score function: featurizing: ', time.time()-t)
 	t = time.time()
@@ -162,6 +175,7 @@ def score_func(pipeline, channels, feature_space):
 
 	#scoring all unscored points in the feature space
 	noscore = feature_space[:,:num_feat]
+
 	for i, row in enumerate(feature_space):
 		if row[idx_f_s] is None:
 
@@ -169,6 +183,9 @@ def score_func(pipeline, channels, feature_space):
 			dist = noscore-point
 			score = dist.sum(axis=1).mean()
 			feature_space[i,idx_f_s] = abs(score)
+
+			row = feature_space[i]
+			if output_verbose: print('OUTPUT: new score: {{"score": {}, "window_id": {}, "channel": {}}}'.format(row[idx_f_s], row[idx_f_w], row[idx_f_c]))
 
 	if debug_verbose: print('DEBUG: score function: scoring: ', time.time()-t)
 
@@ -275,7 +292,8 @@ class Pipeline:
 		self.num_channels = None
 		self.input_size = None
 		self.channel_length = None
-		self.num_beats = 100
+		self.num_beats = -1					#how many beats can exist, -1 deactivates
+		self.time_beats = 100				#how long beats can exist, -1 deactivates
 		self.num_flags = None
 		self.window_size = None
 		self.win_function = None
@@ -411,11 +429,13 @@ def run_from_test_file(file_name):
 	print('running...')
 
 	with open('Tests\\' + file_name) as file_in:
+		lineNum = 0
 		for line in file_in:
+			lineNum +=1
 			try:
 				p.cmd(line)
 			except Exception as e:
-				print('Failed line: ')
+				print('Failed line {}: '.format(lineNum))
 				print(line)
 				raise e
 
@@ -432,7 +452,10 @@ if __name__ == '__main__':
 	# start = time.time()
 
 	# run_from_test_file('2021-5-6-19-44-28-478.txt')
+	# run_from_test_file('2021-5-12-19-21-56-120_timetrim.txt')
+	# run_from_test_file('beatCreation.txt')
+	# run_from_test_file('beatCreationMultichan.txt')
 	# run_from_test_file('2021-5-12-19-21-56-120.txt')
-
+	# print(time.time())
 	run()
 	# print('time: ', time.time()-start)
