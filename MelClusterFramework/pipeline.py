@@ -158,10 +158,10 @@ def score_func(pipeline, channels, feature_space):
 				#appending
 				feature_space = np.append(feature_space, [featurized_window], axis=0)
 				#trimming
-				if pipeline.num_beats is not -1:
+				if pipeline.num_beats != -1:
 					#trimming based on number of beats
 					feature_space = feature_space[-pipeline.num_beats:]
-				elif pipeline.time_beats is not -1:
+				elif pipeline.time_beats != -1:
 					#trimming based on how long beats have existed
 					feature_space = feature_space[(time.time() - feature_space[:,idx_f_t]) < pipeline.time_beats]
 
