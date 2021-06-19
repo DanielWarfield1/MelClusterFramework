@@ -289,24 +289,40 @@ def async_func(pipeline, channels, feature_space, args):
                                                                                        beat[idx_f_s],
                                                                                        t-beat[idx_f_t]))
 
-        #sorts beats based on closeness to input beat
-        #TODO
+        #sorts beats based on closeness to input beat (Manhattan-esque)
         if 'closest_beats' in arg:
 
+            #parsing arguments
             print('this doesnt work yet...')
             result = eval(re.search('closest_beats(.*)', arg).group(1))[0]
-            beat = pipeline.feature_space[np.where(pipeline.feature_space[:,idx_f_w] == result)]
 
-            difference = pipeline.feature_space[:,:num_feat] - beat[:num_feat]
-            print(difference)
+            #calculating distances from beat
+            beat = pipeline.feature_space[np.where(pipeline.feature_space[:,idx_f_w] == result)]
+            dist = np.absolute((pipeline.feature_space[:,:num_feat] - beat[0,:num_feat])).mean(axis=1)
+
+            #aggregating distance and beat information, then sorting
+            dist_info = np.insert(pipeline.feature_space[:,num_feat:], 0, dist, axis=1)
+            dist_info = dist_info[np.argsort(dist_info[:, 0])]
+
+            #translating indexes
+            f_s = idx_f_s-num_feat+1
+            f_c = idx_f_c-num_feat+1
+            f_w = idx_f_w-num_feat+1
+            f_t = idx_f_t-num_feat+1
+
+            #printing 
+            print('RESPONSE: Beats closest to {}:'.format(result))
+            t = time.time()
+            for beat in dist_info:
+                print('-beat: {{"channel":{},"window":{},"distance":{},"score":{},"age":{}}}'.format(beat[f_c],
+                                                                                       beat[f_w],
+                                                                                       beat[0],
+                                                                                       beat[f_s],
+                                                                                       t-beat[f_t]))
+
             # print(beat)
             # print('foo')
             # print(pipeline.feature_space)
-
-        #get the n closest
-        if 'closest' in arg:
-            #parsing arguments
-            result = re.search('c(.*)', arg).group(1)
 
     return channels, feature_space
 
