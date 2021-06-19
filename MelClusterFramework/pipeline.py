@@ -263,7 +263,7 @@ def async_func(pipeline, channels, feature_space, args):
         if 'score' in arg:
 
             #parsing arguments
-            result = re.search('s(.*)', arg).group(1)
+            result = re.search('score(.*)', arg).group(1)
 
             #getting selected channels
             selected = eval('channels{}'.format(result))
@@ -502,6 +502,7 @@ if __name__ == '__main__':
     # run_from_test_file('beatCreationMultichan.txt')
     # run_from_test_file('2021-5-12-19-21-56-120.txt')
     # run_from_test_file('nClosest.txt')
+    # run_from_test_file('2021-5-19-15-57-46-158.txt')
     # print(time.time())
     run()
     # print('time: ', time.time()-start)
