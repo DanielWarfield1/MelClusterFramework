@@ -261,24 +261,19 @@ def async_func(pipeline, channels, feature_space, args):
 
 			#parsing arguments
 			result = re.search('s(.*)', arg).group(1)
-			result = result.replace('[', '')
-			result = result.replace(']', '')
 
-			#getting windows to find the scores of
-			if ':' in result:
-				i1 = int(result.split(':')[0])
-				i2 = int(result.split(':')[1])
-				windows = get_windows(channels[i1:i2])
-			elif len(result) == 0:
-				windows = get_windows(pipeline, channels)
-			else:
-				windows = get_windows(pipeline, [channels[int(result)]])
+			#getting selected channels
+			selected = eval('channels{}'.format(result))
+			selected = selected if type(selected) is list else [selected]
+
+			#getting all the windows from the selected channels
+			windows = get_windows(pipeline, selected)
 
 			#getting relevant windows
 			relevent = np.array([beat for beat in feature_space if beat[idx_f_w] in windows])
 
 			#printing the score
-			print('RESPONSE: Score for [', result, ']: ',relevent[:,idx_f_s].mean())
+			print('RESPONSE: Score for ', result, ': ',relevent[:,idx_f_s].mean())
 
 
 	return channels, feature_space
@@ -452,10 +447,10 @@ if __name__ == '__main__':
 	# start = time.time()
 
 	# run_from_test_file('2021-5-6-19-44-28-478.txt')
-	# run_from_test_file('2021-5-12-19-21-56-120_timetrim.txt')
+	run_from_test_file('2021-5-12-19-21-56-120_timetrim.txt')
 	# run_from_test_file('beatCreation.txt')
 	# run_from_test_file('beatCreationMultichan.txt')
 	# run_from_test_file('2021-5-12-19-21-56-120.txt')
 	# print(time.time())
-	run()
+	# run()
 	# print('time: ', time.time()-start)
