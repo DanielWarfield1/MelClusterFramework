@@ -293,7 +293,6 @@ def async_func(pipeline, channels, feature_space, args):
         if 'closest_beats' in arg:
 
             #parsing arguments
-            print('this doesnt work yet...')
             result = eval(re.search('closest_beats(.*)', arg).group(1))[0]
 
             #calculating distances from beat
@@ -324,7 +323,62 @@ def async_func(pipeline, channels, feature_space, args):
             # print('foo')
             # print(pipeline.feature_space)
 
+        #this clears the contents of each axis in plot_mel_list
+        if 'clear_list_axes' in arg:
+            if 'list_fig' in async_func.ploting_resources:
+                for ax in async_func.ploting_resources['list_fig'].axes:
+                    ax.clear()
+
+        #plots a list of mel spectrograms
+        #accepts a list of lists
+        if 'plot_mel_list' in arg:
+
+            result = eval(re.search('plot_mel_list(.*)', arg).group(1))
+
+            #creating axes
+            if 'list_fig' not in async_func.ploting_resources:
+                async_func.ploting_resources['list_fig'] = plt.subplots(len(result))[0]
+
+            #change in number of axes
+            if len(async_func.ploting_resources['list_fig'].axes) != len(result):
+                async_func.ploting_resources['list_fig'].clear()
+                for i in range(len(result)):
+                    async_func.ploting_resources['list_fig'].add_subplot(len(result), 1, i+1)
+
+            for r, ax in zip(result,async_func.ploting_resources['list_fig'].axes):
+
+                cid = r[0]
+                channel = channels[cid]
+                wid = r[1]
+
+                ax.set_title(str([cid,wid]))
+
+                if channel is None:
+                    continue
+
+                #extracting rows with window id
+                window = np.array([row for row in channel if wid in row[idx_w]])
+
+                if len(window) == 0:
+                    continue
+
+                #plotting window on axis
+                mel = np.transpose(window[:,:idx_n].astype('float'))
+                ax.imshow(mel)
+
+            plt.ion()
+            plt.show()
+            plt.draw()
+            plt.pause(0.001)
+
+        #plots a list of feature lines
+        if 'plot_feature_list' in arg:
+            result = eval(re.search('plot_mels(.*)', arg).group(1))[0]
+
     return channels, feature_space
+
+#persistent data for 
+async_func.ploting_resources={}
 
 #a pipeline for excepting time series 2D data in channels, grouping data into "beats",
 #and processing and scoring steps
@@ -503,6 +557,10 @@ if __name__ == '__main__':
     # run_from_test_file('2021-5-12-19-21-56-120.txt')
     # run_from_test_file('nClosest.txt')
     # run_from_test_file('2021-5-19-15-57-46-158.txt')
+    # run_from_test_file('melSpecPlotting.txt')
+
+    # time.sleep(3)
+
     # print(time.time())
     run()
     # print('time: ', time.time()-start)
