@@ -424,7 +424,7 @@ def async_func(pipeline, channels, feature_space, args):
             plt.ion()
             plt.show()
             plt.draw()
-            plt.pause(1)
+            plt.pause(0.001)
 
         #plots a list of feature lines
         if 'plot_feature_list' in arg:
