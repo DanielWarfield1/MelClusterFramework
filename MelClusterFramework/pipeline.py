@@ -217,6 +217,7 @@ def get_windows(pipeline, channels):
 
     return all_windows
 
+
 #creates a TSNE plot of the feature_space
 #accepts arguments seperated by spaces:
 #"p s[1:4]" would plot the mel spectrogram, and produce a score for channels 1-3
@@ -319,10 +320,6 @@ def async_func(pipeline, channels, feature_space, args):
                                                                                        beat[f_s],
                                                                                        t-beat[f_t]))
 
-            # print(beat)
-            # print('foo')
-            # print(pipeline.feature_space)
-
         #this clears the contents of each axis in plot_mel_list
         if 'clear_list_axes' in arg:
             if 'list_fig' in async_func.ploting_resources:
@@ -334,7 +331,6 @@ def async_func(pipeline, channels, feature_space, args):
         if 'plot_mel_list' in arg:
 
             result = eval(re.search('plot_mel_list(.*)', arg).group(1))
-
             #creating axes
             if 'list_fig' not in async_func.ploting_resources:
                 async_func.ploting_resources['list_fig'] = plt.subplots(len(result))[0]
@@ -370,6 +366,65 @@ def async_func(pipeline, channels, feature_space, args):
             plt.show()
             plt.draw()
             plt.pause(0.001)
+
+        #plots the n closest to a beat
+        if 'plot_n_closest' in arg:
+
+            #-----------------------------------
+            #parsing arguments
+            bidx = eval(re.search('plot_n_closest(.*)', arg).group(1))[0]
+            n = eval(re.search('plot_n_closest(.*)', arg).group(1))[1]
+
+            #calculating distances from beat
+            beat = pipeline.feature_space[np.where(pipeline.feature_space[:,idx_f_w] == bidx)]
+            dist = np.absolute((pipeline.feature_space[:,:num_feat] - beat[0,:num_feat])).mean(axis=1)
+
+            #aggregating distance and beat information, then sorting
+            dist_info = np.insert(pipeline.feature_space[:,num_feat:], 0, dist, axis=1)
+            dist_info = dist_info[np.argsort(dist_info[:, 0])]
+
+            #translating indexes
+            f_w = idx_f_w-num_feat+1
+            f_c = idx_f_c-num_feat+1
+
+            beats_to_plot = [[beat[f_c],beat[f_w]] for beat in dist_info][:n]
+
+            #-----------------------------------
+            #creating axes
+            if 'list_fig' not in async_func.ploting_resources:
+                async_func.ploting_resources['list_fig'] = plt.subplots(len(beats_to_plot))[0]
+
+            #change in number of axes
+            if len(async_func.ploting_resources['list_fig'].axes) != len(beats_to_plot):
+                async_func.ploting_resources['list_fig'].clear()
+                for i in range(len(beats_to_plot)):
+                    async_func.ploting_resources['list_fig'].add_subplot(len(beats_to_plot), 1, i+1)
+
+            for r, ax in zip(beats_to_plot,async_func.ploting_resources['list_fig'].axes):
+
+                cid = r[0]
+                channel = channels[cid]
+                wid = r[1]
+
+                ax.set_title(str([cid,wid]))
+
+                if channel is None:
+                    continue
+
+                #extracting rows with window id
+                window = np.array([row for row in channel if wid in row[idx_w]])
+
+                if len(window) == 0:
+                    continue
+
+                #plotting window on axis
+                mel = np.transpose(window[:,:idx_n].astype('float'))
+                ax.imshow(mel)
+
+            plt.ion()
+            plt.show()
+            plt.draw()
+            plt.pause(1)
 
         #plots a list of feature lines
         if 'plot_feature_list' in arg:
@@ -558,6 +613,7 @@ if __name__ == '__main__':
     # run_from_test_file('nClosest.txt')
     # run_from_test_file('2021-5-19-15-57-46-158.txt')
     # run_from_test_file('melSpecPlotting.txt')
+    # run_from_test_file('nClosePlotting.txt')
 
     # time.sleep(3)
 
